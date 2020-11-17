@@ -1,6 +1,6 @@
 (() => {
   let yOffset = 0; // window.pageYoffset
-  let prevScrollHeight = 0; // Total previous scroll height
+  let totalPrevScrollHeight = 0; // Total previous scroll height
   let currentScene = 0; // Active scene
   let enterNewScene = false; // New scene enter === true
 
@@ -17,7 +17,11 @@
         messageD: document.querySelector("#scroll-section-0 .main-message.d"),
       },
       values: {
-        messageAOpacity: [0, 1],
+        messageAOpacityIn: [0, 1, { start: 0.1, end: 0.2 }],
+        meesageATranslateYIn: [20, 0, { start: 0.1, end: 0.2 }],
+        messageAOpacityOut: [1, 0, { start: 0.25, end: 0.3 }],
+        meesageATranslateYOut: [0, -20, { start: 0.25, end: 0.3 }],
+        messageBOpacityIn: [0, 1, { start: 0.3, end: 0.4 }],
       },
     },
     {
@@ -68,23 +72,72 @@
 
   const calcValues = (values, currentYOffset) => {
     let rv;
-    let scrollRatio = currentYOffset / sceneInfo[currentScene].scrollHeight;
-    rv = scrollRatio * (values[1] - values[0]) + values[0];
+    const { scrollHeight } = sceneInfo[currentScene];
+    const scrollRatio = currentYOffset / scrollHeight;
+
+    if (values.length === 3) {
+      const partScrollStart = values[2].start * scrollHeight;
+      const partScrollEnd = values[2].end * scrollHeight;
+      const partScrollHeight = partScrollEnd - partScrollStart;
+      // console.log("partScrollStart", partScrollStart);
+      // console.log("partScrollEnd", partScrollEnd);
+      // console.log("partScrollHeight", partScrollHeight);
+      // console.log("currentYOffset", currentYOffset);
+      if (
+        currentYOffset >= partScrollStart &&
+        currentYOffset <= partScrollEnd
+      ) {
+        // 현재 스크롤 값 - 부분 스크롤 값의 시작 지점 / 부분 스크롤 전체 값 + 적용할  영역의 총 수치 ((end - start) + start)
+        rv =
+          ((currentYOffset - partScrollStart) / partScrollHeight) *
+            (values[1] - values[0]) +
+          values[0];
+      } else if (currentYOffset < partScrollStart) {
+        rv = values[0];
+      } else if (currentYOffset < partScrollEnd) {
+        rv = values[1];
+      }
+    } else {
+      rv = scrollRatio * (values[1] - values[0]) + values[0];
+    }
+
     return rv;
   };
 
   const playAnimation = () => {
     const elements = sceneInfo[currentScene].elements;
     const values = sceneInfo[currentScene].values;
-    const currentYOffset = yOffset - prevScrollHeight;
+    // currentYOffset === window scroll - total prev section height
+    const currentYOffset = yOffset - totalPrevScrollHeight;
+    const currentSceneScroll = sceneInfo[currentScene].scrollHeight;
+    const scrollRatio = currentYOffset / currentSceneScroll;
 
     switch (currentScene) {
       case 0:
-        let messageAOpacityIn = calcValues(
-          values.messageAOpacity,
+        const messageAOpacityIn = calcValues(
+          values.messageAOpacityIn,
           currentYOffset
         );
-        elements.messageA.style.opacity = messageAOpacityIn;
+        const messageAOpacityOut = calcValues(
+          values.messageAOpacityOut,
+          currentYOffset
+        );
+        const meesageATranslateYIn = calcValues(
+          values.meesageATranslateYIn,
+          currentYOffset
+        );
+        const meesageATranslateYOut = calcValues(
+          values.meesageATranslateYOut,
+          currentYOffset
+        );
+        console.log("scrollRatio", scrollRatio);
+        if (scrollRatio <= 0.22) {
+          elements.messageA.style.opacity = messageAOpacityIn;
+          elements.messageA.style.transform = `translateY(${meesageATranslateYIn}%)`;
+        } else {
+          elements.messageA.style.opacity = messageAOpacityOut;
+          elements.messageA.style.transform = `translateY(${meesageATranslateYOut}%)`;
+        }
 
         break;
 
@@ -101,20 +154,20 @@
 
   const scrollLoop = () => {
     enterNewScene = false;
-    prevScrollHeight = 0;
+    totalPrevScrollHeight = 0;
     for (let i = 0; i < currentScene; i++) {
-      prevScrollHeight += sceneInfo[i].scrollHeight;
+      totalPrevScrollHeight += sceneInfo[i].scrollHeight;
     }
 
     const { scrollHeight } = sceneInfo[currentScene];
 
-    if (yOffset > prevScrollHeight + scrollHeight) {
+    if (yOffset > totalPrevScrollHeight + scrollHeight) {
       enterNewScene = true;
       currentScene++;
       document.body.setAttribute("id", `show-scene-${currentScene}`);
     }
 
-    if (yOffset < prevScrollHeight) {
+    if (yOffset < totalPrevScrollHeight) {
       enterNewScene = true;
       if (currentScene === 0) return null;
       currentScene--;
