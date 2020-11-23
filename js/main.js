@@ -15,8 +15,13 @@
         messageB: document.querySelector("#scroll-section-0 .main-message.b"),
         messageC: document.querySelector("#scroll-section-0 .main-message.c"),
         messageD: document.querySelector("#scroll-section-0 .main-message.d"),
+        canvas: document.querySelector("#video-canvas-0"),
+        context: document.querySelector("#video-canvas-0").getContext("2d"),
+        videoImages: [],
       },
       values: {
+        videoImageCount: 300,
+        imageSequence: [0, 299],
         messageA_opacity_in: [0, 1, { start: 0.1, end: 0.2 }],
         messageB_opacity_in: [0, 1, { start: 0.3, end: 0.4 }],
         messageC_opacity_in: [0, 1, { start: 0.5, end: 0.6 }],
@@ -86,6 +91,16 @@
       },
     },
   ];
+
+  const setCanvasImages = () => {
+    let image;
+    for (let i = 0; i < sceneInfo[0].values.videoImageCount; i++) {
+      image = new Image();
+      image.src = `001/IMG_${6726 + i}.JPG`;
+      sceneInfo[0].elements.videoImages.push(image);
+    }
+  };
+  setCanvasImages();
 
   const setLayout = () => {
     // 모든 섹션의 수만큼 for문을 실행하여, 각 객체안에 scrollHeight 값에
@@ -172,7 +187,12 @@
 
     switch (currentScene) {
       case 0:
-        console.log(scrollRatio);
+        // console.log(scrollRatio);/
+        let sequence = Math.round(
+          calcValues(values.imageSequence, currentYOffset)
+        );
+        elements.context.drawImage(elements.videoImages[sequence], 0, 0);
+
         if (scrollRatio <= 0.22) {
           // in
           elements.messageA.style.display = "block";
