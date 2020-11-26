@@ -96,6 +96,19 @@
       elements: {
         container: document.querySelector("#scroll-section-3"),
         canvasCaption: document.querySelector(".canvas-caption"),
+        canvas: document.querySelector(".image-blend-canvas"),
+        context: document.querySelector(".image-blend-canvas").getContext("2d"),
+        imagesPath: [
+          "./images/blend-image-1.jpg",
+          "./images/blend-image-2.jpg",
+        ],
+        images: [],
+      },
+      // start x, end x
+      values: {
+        rect1X: [0, 0, { start: 0, end: 0 }],
+        rect2X: [0, 0, { start: 0, end: 0 }],
+        rectStartY: 0,
       },
     },
   ];
@@ -112,6 +125,13 @@
       image2 = new Image();
       image2.src = `002/IMG_${7027 + i}.JPG`;
       sceneInfo[2].elements.videoImages.push(image2);
+    }
+
+    let image3;
+    for (let i = 0; i < sceneInfo[3].elements.imagesPath.length; i++) {
+      image3 = new Image();
+      image3.src = sceneInfo[3].elements.imagesPath[i];
+      sceneInfo[3].elements.images.push(image3);
     }
   };
   setCanvasImages();
@@ -414,6 +434,102 @@
         break;
 
       case 3:
+        // Canvas의 크기는 1920 * 1080으로 고정되어 있는 상태에서
+        // 브라우저의 크기 중 (w,h를 실제 크기 1920 * 1080을 백분율로 구해서)
+        // 더 큰 값을 scale에 대입한다.
+        const widthRatio = window.innerWidth / elements.canvas.width;
+        const heightRatio = window.innerHeight / elements.canvas.height;
+        let canvasScaleRatio;
+        if (widthRatio <= heightRatio) {
+          // 캔버스보다 브라우저 창이 홀쭉(세로형)한 경우
+          canvasScaleRatio = heightRatio;
+        } else {
+          // 캔버스보다 브라우저 창이 (가로형)납작한 경우
+          canvasScaleRatio = widthRatio;
+        }
+
+        elements.canvas.style.transform = `scale(${canvasScaleRatio})`;
+        elements.context.fillStyle = "white";
+        elements.context.drawImage(elements.images[0], 0, 0);
+
+        // 캔버스 사이즈에 맞춰 가정한 innerWidth와 innerHeight
+        // height가 높을 경우 height는 1080, width는 가변적(실제 크기보다 더 높아짐)
+        // width가 높을 경우 width가 1920, height 가변적(실제 크기보다 더 높아짐)
+        // innerWidth는 스크롤 포함이기 때문에 body의 offsetWidth를 쓴다.
+        const recalculatedInnerWidth =
+          document.body.offsetWidth / canvasScaleRatio;
+        const recalculatedInnerHeight = window.innerHeight / canvasScaleRatio;
+
+        // 스크롤이 시작된 값이 rectStartY, 종료된 값은 시작된 값 / 해당 섹션의 총 스크롤 길이
+        if (!values.rectStartY) {
+          // * 애니메이션이 시작해야 하는 top 값을 구해야 하는 로직
+
+          // values.rectStartY = elements.canvas.getBoundingClientRect().top;
+          // offsetTop또한 scale 변형된 값 이전의 원시적인 값을 바라본다.
+          // 구해야 하는 값은 scale로 줄어든 캔버스의 offsetTop 값으로,
+          // 원시 캔버스의 height 값 - scale로 줄어든 캔버스의 height를 하면,
+          // 추가된 height 값이 나온다. 여기선 canvas가 flex에 의해 가운데 정렬되었고,
+          // 필요한 건 박스 상단의 여백 top 값이기 때문에 해당 값에 나누기 2를 해주면 된다.
+          // innerHeight / originCanvasHeight = 백분율을 수치로 되돌리기 위해
+          // originCanvasHeight * 백분율을 해준다.
+          values.rectStartY =
+            elements.canvas.offsetTop +
+            (elements.canvas.height -
+              elements.canvas.height * canvasScaleRatio) /
+              2;
+          values.rect1X[2].start = window.innerHeight / 2 / currentSceneScroll;
+          values.rect2X[2].start = window.innerHeight / 2 / currentSceneScroll;
+          values.rect1X[2].end = values.rectStartY / currentSceneScroll;
+          values.rect2X[2].end = values.rectStartY / currentSceneScroll;
+        }
+
+        // 재 계산된 width 값의 15%, 좌 우측 여백의 각 값..
+        const whiteRectWidth = recalculatedInnerWidth * 0.15;
+
+        // * 조심해야 할 것, scale은 실제 width height 값을 조정하는 게 아니라,
+        // 보이는 것을 조정하기 때문에 아래 계산할 때 요소 검사를 통해 실제 width, height 값으로
+        // 계산할 경우 엄청난 착오가 생길 수 있음.
+
+        // 1920의 캔버스 고정 width 값에서, 재 계산된 width 값을 뺸 후 2로 나눔.
+        // 총 canva 크기 - 실제 화면 크기 === 좌우측 여백의 값 만큼 남게 됨.
+        // 그러므로, 좌우측 여백의 각 위드값 및 좌측의 시작 지점이 됨.
+        // 첫 번째 x 좌표의 시작 지점을 구하는 것.
+        values.rect1X[0] = (elements.canvas.width - recalculatedInnerWidth) / 2;
+
+        // 스크롤이 내려갔을 때 이동할 x 값, 위의 구해준 값 (시작 지점)에서 여백의 크기만큼
+        // 뺴주면 0으로 돌아간다. 사실상 0이나 마찬가지?
+
+        values.rect1X[1] = values.rect1X[0] - whiteRectWidth;
+        // 우측의 x값. 좌측 여백의 크기 + 실제 화면의 크기 (재 계산된 값) - 좌우측 여백의 크기
+        // 위의 계산 === 우측 여백의 x 지점.
+        values.rect2X[0] =
+          values.rect1X[0] + recalculatedInnerWidth - whiteRectWidth;
+
+        values.rect2X[1] = values.rect2X[0] + whiteRectWidth;
+        // elements.context.fillRect(
+        //   values.rect1X[0],
+        //   0,
+        //   parseInt(whiteRectWidth),
+        //   elements.canvas.height
+        // );
+        // elements.context.fillRect(
+        //   values.rect2X[0],
+        //   0,
+        //   parseInt(whiteRectWidth),
+        //   elements.canvas.height
+        // );
+        elements.context.fillRect(
+          parseInt(calcValues(values.rect1X, currentYOffset)),
+          0,
+          parseInt(whiteRectWidth),
+          elements.canvas.height
+        );
+        elements.context.fillRect(
+          parseInt(calcValues(values.rect2X, currentYOffset)),
+          0,
+          parseInt(whiteRectWidth),
+          elements.canvas.height
+        );
         break;
     }
   };
