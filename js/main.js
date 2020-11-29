@@ -3,6 +3,10 @@
   let totalPrevScrollHeight = 0; // 이전 섹션의 높이 총 합
   let currentScene = 0; // 현재 섹션
   let enterNewScene = false; // 새로운 섹션 진입 시에만 true 변경
+  let acc = 0.1;
+  let delayedYOffset = 0;
+  let rafId;
+  let rafState;
 
   const sceneInfo = [
     {
@@ -108,6 +112,10 @@
       values: {
         rect1X: [0, 0, { start: 0, end: 0 }],
         rect2X: [0, 0, { start: 0, end: 0 }],
+        blendHeight: [0, 0, { start: 0, end: 0 }],
+        canvas_scale: [0, 0, { start: 0, end: 0 }],
+        canvasCaption_opacity: [0, 1, { start: 0, end: 0 }],
+        canvasCaption_translateY: [20, 0, { start: 0, end: 0 }],
         rectStartY: 0,
       },
     },
@@ -134,7 +142,14 @@
       sceneInfo[3].elements.images.push(image3);
     }
   };
-  setCanvasImages();
+
+  const checkMenu = () => {
+    if (yOffset > 44) {
+      document.body.classList.add("local-nav-sticky");
+    } else {
+      document.body.classList.remove("local-nav-sticky");
+    }
+  };
 
   const setLayout = () => {
     // 모든 섹션의 수만큼 for문을 실행하여, 각 객체안에 scrollHeight 값에
@@ -176,7 +191,7 @@
   const calcValues = (values, currentYOffset) => {
     // scrollRatio = 현재 스크롤에서의 높이 값 / 섹션의 높이 값
     let rv;
-    const { scrollHeight } = sceneInfo[currentScene];
+    const scrollHeight = sceneInfo[currentScene].scrollHeight;
     const scrollRatio = currentYOffset / scrollHeight;
 
     // values의 길이가 3이라면 해당 엘리먼트의 시작 지점과 끝 지점이 있는 것.
@@ -204,11 +219,14 @@
             (values[1] - values[0]) +
           values[0];
       } else if (currentYOffset < partScrollStart) {
+        // 현재 YOffset 값보다 부분 스크롤 시작 값이 낮을 경우, 시작 값으로 설정
         rv = values[0];
-      } else if (currentYOffset < partScrollEnd) {
+      } else if (currentYOffset > partScrollEnd) {
+        // 현재 YOffset 값이 부분 스크롤 끝 값보다 클 경우, end 값으로 설정
         rv = values[1];
       }
     } else {
+      // scrollRatio가 0.25일 경우 0.25 * ( end(1) - start(0) ) + start(0) = 0.25
       rv = scrollRatio * (values[1] - values[0]) + values[0];
     }
 
@@ -226,10 +244,10 @@
     switch (currentScene) {
       case 0:
         // console.log(scrollRatio);/
-        let sequence = Math.round(
-          calcValues(values.imageSequence, currentYOffset)
-        );
-        elements.context.drawImage(elements.videoImages[sequence], 0, 0);
+        // let sequence = Math.round(
+        //   calcValues(values.imageSequence, currentYOffset)
+        // );
+        // elements.context.drawImage(elements.videoImages[sequence], 0, 0);
         elements.canvas.style.opacity = calcValues(
           values.canvas_opacity,
           currentYOffset
@@ -332,10 +350,10 @@
         break;
 
       case 2:
-        let sequence2 = Math.round(
-          calcValues(values.imageSequence, currentYOffset)
-        );
-        elements.context.drawImage(elements.videoImages[sequence2], 0, 0);
+        // let sequence2 = Math.round(
+        //   calcValues(values.imageSequence, currentYOffset)
+        // );
+        // elements.context.drawImage(elements.videoImages[sequence2], 0, 0);
 
         if (scrollRatio <= 0.5) {
           elements.canvas.style.opacity = calcValues(
@@ -431,12 +449,60 @@
           )})`;
         }
 
+        if (scrollRatio > 0.9) {
+          const elements = sceneInfo[3].elements;
+          const values = sceneInfo[3].values;
+          const widthRatio = window.innerWidth / elements.canvas.width;
+          const heightRatio = window.innerHeight / elements.canvas.height;
+          let canvasScaleRatio;
+
+          if (widthRatio <= heightRatio) {
+            // 캔버스보다 브라우저 창이 홀쭉(세로형)한 경우
+            canvasScaleRatio = heightRatio;
+          } else {
+            // 캔버스보다 브라우저 창이 (가로형)납작한 경우
+            canvasScaleRatio = widthRatio;
+          }
+
+          // currentScene3에서 쓰는 캔버스를 미리 그려줌
+
+          elements.canvas.style.transform = `scale(${canvasScaleRatio})`;
+          elements.context.fillStyle = "white";
+          elements.context.drawImage(elements.images[0], 0, 0);
+
+          const recalculatedInnerWidth =
+            document.body.offsetWidth / canvasScaleRatio;
+          const recalculatedInnerHeight = window.innerHeight / canvasScaleRatio;
+
+          const whiteRectWidth = recalculatedInnerWidth * 0.15;
+          values.rect1X[0] =
+            (elements.canvas.width - recalculatedInnerWidth) / 2;
+          values.rect1X[1] = values.rect1X[0] - whiteRectWidth;
+          values.rect2X[0] =
+            values.rect1X[0] + recalculatedInnerWidth - whiteRectWidth;
+          values.rect2X[1] = values.rect2X[0] + whiteRectWidth;
+
+          elements.context.fillRect(
+            parseInt(values.rect1X[0]),
+            0,
+            parseInt(whiteRectWidth),
+            elements.canvas.height
+          );
+          elements.context.fillRect(
+            parseInt(values.rect2X[0]),
+            0,
+            parseInt(whiteRectWidth),
+            elements.canvas.height
+          );
+        }
+
         break;
 
       case 3:
         // Canvas의 크기는 1920 * 1080으로 고정되어 있는 상태에서
         // 브라우저의 크기 중 (w,h를 실제 크기 1920 * 1080을 백분율로 구해서)
         // 더 큰 값을 scale에 대입한다.
+        let step = 0;
         const widthRatio = window.innerWidth / elements.canvas.width;
         const heightRatio = window.innerHeight / elements.canvas.height;
         let canvasScaleRatio;
@@ -530,6 +596,103 @@
           parseInt(whiteRectWidth),
           elements.canvas.height
         );
+
+        if (scrollRatio < values.rect1X[2].end) {
+          step = 1;
+          elements.canvas.classList.remove("sticky");
+        } else {
+          step = 2;
+          values.blendHeight[0] = 0;
+          values.blendHeight[1] = elements.canvas.height;
+          values.blendHeight[2].start = values.rect1X[2].end;
+          values.blendHeight[2].end = values.blendHeight[2].start + 0.2;
+          const blendHeight = calcValues(values.blendHeight, currentYOffset);
+
+          // elements.canvas-height (1080) - blendHeight (0부터 end까지 올라감) 을 빼면
+          // 1080에서 end 시점은 0이 되므로 아래에서 위로 그려지는 것
+          // dX,   the left X canvas position to start drawing the clipped sub-image
+          //   dY,  the top Y canvas position to start drawing the clipped sub-image
+          //   dW,  scale sW to dW and draw a dW wide sub-image on the canvas
+          //   dH;  scale sH to dH and draw a dH high sub-image on the canvas
+
+          // elements.context.drawImage(
+          //   elements.images[1],
+          //   0,
+          //   elements.canvas.height - blendHeight,
+          //   elements.canvas.width,
+          //   blendHeight,
+          //   0,
+          //   elements.canvas.height - blendHeight,
+          //   elements.canvas.width,
+          //   blendHeight
+          // );
+
+          elements.context.drawImage(
+            elements.images[1],
+            0,
+            elements.canvas.height - blendHeight,
+            elements.canvas.width,
+            blendHeight,
+            0,
+            elements.canvas.height - blendHeight,
+            elements.canvas.width,
+            blendHeight
+          );
+
+          elements.canvas.classList.add("sticky");
+          elements.canvas.style.top = `${
+            -(
+              elements.canvas.height -
+              elements.canvas.height * canvasScaleRatio
+            ) / 2
+          }px`;
+
+          // 현재 스크롤이 draw animatino을 끝냈을 때부터 시작, 스케일이 점점 낮아지는 구간
+          if (scrollRatio > values.blendHeight[2].end) {
+            values.canvas_scale[0] = canvasScaleRatio;
+            values.canvas_scale[1] =
+              document.body.offsetWidth / (1.5 * elements.canvas.width);
+
+            values.canvas_scale[2].start = values.blendHeight[2].end;
+            values.canvas_scale[2].end = values.canvas_scale[2].start + 0.2;
+
+            elements.canvas.style.transform = `scale(${calcValues(
+              values.canvas_scale,
+              currentYOffset
+            )})`;
+            elements.canvas.style.marginTop = 0;
+          }
+
+          // 스케일이 모두 낮아지고, 다시 포지션이 정상으로 돌아간 후 픽스된 순간부터
+          // 내려온 top 값을 margin-top 으로 잡아줌.
+          if (
+            scrollRatio > values.canvas_scale[2].end &&
+            values.canvas_scale[2].end > 0
+          ) {
+            elements.canvas.classList.remove("sticky");
+            // fixed가 되고나서 0.4배만큼 내려왔기 때문에 0.4 margin top 값 대입.
+            elements.canvas.style.marginTop = `${currentSceneScroll * 0.4}px`;
+
+            values.canvasCaption_opacity[2].start = values.canvas_scale[2].end;
+            values.canvasCaption_opacity[2].end =
+              values.canvasCaption_opacity[2].start + 0.1;
+
+            values.canvasCaption_translateY[2].start =
+              values.canvasCaption_opacity[2].start;
+            values.canvasCaption_translateY[2].end =
+              values.canvasCaption_opacity[2].end;
+
+            elements.canvasCaption.style.opacity = calcValues(
+              values.canvasCaption_opacity,
+              currentYOffset
+            );
+            elements.canvasCaption.style.transform = `translate3d(0,${calcValues(
+              values.canvasCaption_translateY,
+              currentYOffset
+            )}%, 0)`;
+          }
+        }
+
         break;
     }
   };
@@ -537,18 +700,19 @@
   const scrollLoop = () => {
     enterNewScene = false;
     totalPrevScrollHeight = 0;
+
     for (let i = 0; i < currentScene; i++) {
       totalPrevScrollHeight += sceneInfo[i].scrollHeight;
     }
 
     const { scrollHeight } = sceneInfo[currentScene];
-    if (yOffset > totalPrevScrollHeight + scrollHeight) {
+    if (delayedYOffset > totalPrevScrollHeight + scrollHeight) {
       enterNewScene = true;
       currentScene++;
       document.body.setAttribute("id", `show-scene-${currentScene}`);
     }
 
-    if (yOffset < totalPrevScrollHeight) {
+    if (delayedYOffset < totalPrevScrollHeight) {
       enterNewScene = true;
       if (currentScene === 0) return null;
       currentScene--;
@@ -560,9 +724,41 @@
     playAnimation();
   };
 
+  function loop() {
+    // 감속의 원리
+    delayedYOffset = delayedYOffset + (yOffset - delayedYOffset) * acc;
+
+    if (!enterNewScene) {
+      if (currentScene === 0 || currentScene === 2) {
+        const currentYOffset = delayedYOffset - totalPrevScrollHeight;
+        const elements = sceneInfo[currentScene].elements;
+        const values = sceneInfo[currentScene].values;
+        let sequence = Math.round(
+          calcValues(values.imageSequence, currentYOffset)
+        );
+        if (elements.videoImages[sequence]) {
+          elements.context.drawImage(elements.videoImages[sequence], 0, 0);
+        }
+      }
+    }
+
+    rafId = requestAnimationFrame(loop);
+
+    if (Math.abs(pageYOffset - delayedYOffset) < 1) {
+      cancelAnimationFrame(rafId);
+      rafState = false;
+    }
+  }
+
   window.addEventListener("scroll", () => {
     yOffset = window.pageYOffset;
     scrollLoop();
+    checkMenu();
+
+    if (!rafState) {
+      rafId = requestAnimationFrame(loop);
+      refState = true;
+    }
   });
   window.addEventListener("load", () => {
     setLayout();
@@ -572,5 +768,12 @@
       0
     );
   });
-  window.addEventListener("resize", setLayout);
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900) {
+      setLayout();
+    }
+    sceneInfo[3].values.rectStartY = 0;
+  });
+  window.addEventListener("orientationchange", setLayout);
+  setCanvasImages();
 })();
