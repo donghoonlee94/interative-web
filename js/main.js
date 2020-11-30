@@ -700,15 +700,25 @@
   const scrollLoop = () => {
     enterNewScene = false;
     totalPrevScrollHeight = 0;
-
     for (let i = 0; i < currentScene; i++) {
       totalPrevScrollHeight += sceneInfo[i].scrollHeight;
     }
 
     const { scrollHeight } = sceneInfo[currentScene];
+
+    if (delayedYOffset < totalPrevScrollHeight + scrollHeight) {
+      document.body.classList.remove("scroll-effect-end");
+    }
+
     if (delayedYOffset > totalPrevScrollHeight + scrollHeight) {
       enterNewScene = true;
-      currentScene++;
+
+      if (currentScene === sceneInfo.length - 1) {
+        document.body.classList.add("scroll-effect-end");
+      }
+      if (currentScene < sceneInfo.length - 1) {
+        currentScene++;
+      }
       document.body.setAttribute("id", `show-scene-${currentScene}`);
     }
 
@@ -750,30 +760,59 @@
     }
   }
 
-  window.addEventListener("scroll", () => {
-    yOffset = window.pageYOffset;
-    scrollLoop();
-    checkMenu();
-
-    if (!rafState) {
-      rafId = requestAnimationFrame(loop);
-      refState = true;
-    }
-  });
   window.addEventListener("load", () => {
+    document.body.classList.remove("before-load");
     setLayout();
     sceneInfo[0].elements.context.drawImage(
       sceneInfo[0].elements.videoImages[0],
       0,
       0
     );
-  });
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 900) {
-      setLayout();
+
+    let tempYOffset = yOffset;
+    let tempScrollCount = 0;
+
+    if (yOffset > 0) {
+      let siId = setInterval(() => {
+        window.scrollTo(0, tempYOffset);
+        tempYOffset += 2;
+        if (tempScrollCount >= 20) {
+          clearInterval(siId);
+        }
+        tempScrollCount++;
+      }, 20);
     }
-    sceneInfo[3].values.rectStartY = 0;
+
+    window.addEventListener("scroll", () => {
+      yOffset = window.pageYOffset;
+      scrollLoop();
+      checkMenu();
+
+      if (!rafState) {
+        rafId = requestAnimationFrame(loop);
+        refState = true;
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 900) {
+        // setLayout();
+        // sceneInfo[3].values.rectStartY = 0;
+        window.location.reload();
+      }
+    });
+    window.addEventListener("orientationchange", () => {
+      scrollTo(0, 0);
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    });
+    document
+      .querySelector(".loading")
+      .addEventListener("transitionend", (e) => {
+        document.body.removeChild(e.currentTarget);
+      });
   });
-  window.addEventListener("orientationchange", setLayout);
+
   setCanvasImages();
 })();
